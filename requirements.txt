@@ -1,4 +1,5 @@
 wheel>=0.22
-Flask>=0.10.0
-Flask-Restless>=0.17.0
-PyYAML>=3.11
+Flask>=2.3.2
+Flask-Restless-NG==3.0.0
+flask-swagger-ui==4.11.1
+PyYAML>=6.0

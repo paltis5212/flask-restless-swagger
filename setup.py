@@ -35,7 +35,6 @@ setup(
     package_dir={'flask_restless_swagger': 'flask_restless_swagger'},
     include_package_data=True,
     install_requires=[
-        'Flask>=2.3.2',
         'Flask-Restless-NG==3.0.0',
         'flask-swagger-ui==4.11.1',
     ],

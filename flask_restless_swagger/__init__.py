@@ -15,7 +15,11 @@ from flask_swagger_ui import get_swaggerui_blueprint
 
 
 def get_columns(model):
-    return {c.name: getattr(model, c.name) for c in model.__table__.columns}
+    return {
+        c.name: getattr(model, c.name)
+        for c in model.__table__.columns
+        if c.name != "id"
+    }
 
 
 sqlalchemy_swagger_type = {
@@ -42,10 +46,12 @@ sqlalchemy_swagger_type = {
 
 class SwagAPIManager(object):
     swagger = {
-        "openapi": "3.0.1",
+        "swagger": "2.0",
         "info": {"title": "DB API", "version": ""},
+        "consumes": ["application/vnd.api+json"],
+        "produces": ["application/vnd.api+json"],
         "paths": {},
-        "components": {"schemas": {}},
+        "definitions": {},
     }
 
     def __init__(self, app=None, **kwargs):
@@ -111,22 +117,16 @@ class SwagAPIManager(object):
                             "name": "q",
                             "in": "query",
                             "description": "searchjson",
-                            "schema": {"type": "string"},
+                            "type": "string",
                         }
                     ],
                     "responses": {
-                        "200": {
+                        200: {
                             "description": "List " + name,
-                            "content": {
-                                "application/vnd.api+json": {
-                                    "schema": {
-                                        "title": name,
-                                        "type": "array",
-                                        "items": {
-                                            "$ref": "#/components/schemas/" + name
-                                        },
-                                    }
-                                }
+                            "schema": {
+                                "title": name,
+                                "type": "array",
+                                "items": {"$ref": "#/definitions/" + name},
                             },
                         }
                     },
@@ -143,17 +143,13 @@ class SwagAPIManager(object):
                             "in": "path",
                             "description": "ID of " + schema,
                             "required": True,
-                            "schema": {"type": "string"},
+                            "type": "integer",
                         }
                     ],
                     "responses": {
-                        "200": {
+                        200: {
                             "description": "Success " + name,
-                            "content": {
-                                "application/vnd.api+json": {
-                                    "schema": {"$ref": "#/components/schemas/" + name}
-                                }
-                            },
+                            "schema": {"$ref": "#/definitions/" + name},
                         }
                     },
                 }
@@ -169,13 +165,42 @@ class SwagAPIManager(object):
                             "in": "path",
                             "description": "ID of " + schema,
                             "required": True,
-                            "schema": {"type": "string"},
+                            "type": "integer",
                         }
                     ],
-                    "responses": {"200": {"description": "Success", "content": {}}},
+                    "responses": {200: {"description": "Success"}},
                 }
                 if model.__doc__:
                     self.swagger["paths"][id_path]["description"] = model.__doc__
+            elif method == "post":
+                self.swagger["paths"][path][method] = {
+                    "parameters": [
+                        {
+                            "name": name,
+                            "in": "body",
+                            "description": schema,
+                            "type": "object",
+                            "properties": {
+                                "data": {
+                                    "type": "object",
+                                    "properties": {
+                                        "type": {
+                                            "type": "string",
+                                            "default": schema,
+                                        },
+                                        "attributes": {
+                                            "type": schema,
+                                            "$ref": "#/definitions/" + schema,
+                                        },
+                                    },
+                                }
+                            },
+                        }
+                    ],
+                    "responses": {200: {"description": "Success"}},
+                }
+                if model.__doc__:
+                    self.swagger["paths"][path]["description"] = model.__doc__
             elif method == "patch":
                 if id_path not in self.swagger["paths"]:
                     self.swagger["paths"][id_path] = {}
@@ -186,48 +211,42 @@ class SwagAPIManager(object):
                             "in": "path",
                             "description": "ID of " + schema,
                             "required": True,
-                            "schema": {"type": "string"},
-                        }
+                            "type": "integer",
+                        },
+                        {
+                            "name": name,
+                            "in": "body",
+                            "description": schema,
+                            "type": "object",
+                            "properties": {
+                                "data": {
+                                    "type": "object",
+                                    "properties": {
+                                        "id": {
+                                            "type": "string",
+                                            "default": "",
+                                        },
+                                        "type": {
+                                            "type": "string",
+                                            "default": schema,
+                                        },
+                                        "attributes": {
+                                            "type": schema,
+                                            "$ref": "#/definitions/" + schema,
+                                        },
+                                    },
+                                }
+                            },
+                        },
                     ],
-                    "requestBody": {
-                        "content": {
-                            "application/vnd.api+json": {
-                                "schema": {"$ref": "#/components/schemas/" + schema}
-                            }
-                        },
-                        "required": True,
-                    },
-                    "responses": {"200": {"description": "Success", "content": {}}},
+                    "responses": {200: {"description": "Success"}},
                 }
                 if model.__doc__:
-                    self.swagger["paths"][id_path]["requestBody"][
-                        "description"
-                    ] = model.__doc__
-            elif method == "post":
-                if id_path not in self.swagger["paths"]:
-                    self.swagger["paths"][id_path] = {}
-                self.swagger["paths"][path][method] = {
-                    "requestBody": {
-                        "content": {
-                            "application/vnd.api+json": {
-                                "schema": {"$ref": "#/components/schemas/" + schema}
-                            }
-                        },
-                        "required": True,
-                    },
-                    "responses": {"200": {"description": "Success", "content": {}}},
-                }
-                if model.__doc__:
-                    self.swagger["paths"][path]["requestBody"][
-                        "description"
-                    ] = model.__doc__
+                    self.swagger["paths"][id_path]["description"] = model.__doc__
 
     def add_defn(self, model, **kwargs):
         name = model.__name__
-        self.swagger["components"]["schemas"][name] = {
-            "type": "object",
-            "properties": {},
-        }
+        self.swagger["definitions"][name] = {"type": "object", "properties": {}}
         columns = get_columns(model).keys()
         for column_name, column in get_columns(model).items():
             if column_name in kwargs.get("exclude_columns", []):
@@ -255,9 +274,7 @@ class SwagAPIManager(object):
 
             if column.__doc__:
                 column_defn["description"] = column.__doc__
-            self.swagger["components"]["schemas"][name]["properties"][
-                column_name
-            ] = column_defn
+            self.swagger["definitions"][name]["properties"][column_name] = column_defn
 
     def init_app(self, app, doc_prefix="/dbdoc", url_prefix="/db", **kwargs):
         self.app = app
@@ -266,11 +283,9 @@ class SwagAPIManager(object):
         @app.route(f"{doc_prefix}.json")
         def doc_json():
             # I can only get this from a request context
-            scheme = request.scheme
-            host = urlparse.urlparse(request.url_root).netloc
-            self.swagger["servers"] = [
-                {"url": f"{scheme}://{host}{url_prefix}"},
-            ]
+            self.swagger["host"] = urlparse.urlparse(request.url_root).netloc
+            self.swagger["basePath"] = url_prefix
+            self.swagger["schemes"] = (request.scheme,)
             return jsonify(self.swagger)
 
         # /dbdoc

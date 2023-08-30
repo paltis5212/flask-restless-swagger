@@ -18,7 +18,7 @@ def get_columns(model):
     return {
         c.name: getattr(model, c.name)
         for c in model.__table__.columns
-        if c.name != "id"
+        if hasattr(model, c.name) and c.name != "id"
     }
 
 
